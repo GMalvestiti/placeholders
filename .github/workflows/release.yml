@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version of the release'
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Extract Gradle version
+        id: gradle_version
+        run: |
+          GRADLE_VERSION=$(grep 'distributionUrl=' gradle/wrapper/gradle-wrapper.properties | sed -E 's/.*gradle-([0-9.]+)-bin\.zip/\1/')
+          echo "GRADLE_VERSION=$GRADLE_VERSION" >> $GITHUB_ENV
+
+      - name: Install Gradle
+        run: |
+          wget https://services.gradle.org/distributions/gradle-${{ env.GRADLE_VERSION }}-bin.zip
+          unzip gradle-${{ env.GRADLE_VERSION }}-bin.zip
+          sudo mv gradle-${{ env.GRADLE_VERSION }} /opt/gradle
+          echo "/opt/gradle/bin" >> $GITHUB_PATH
+
+      - name: Generate Gradle Wrapper
+        run: |
+          gradle wrapper --gradle-version ${{ env.GRADLE_VERSION }}
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew build
+
+      - name: List contents of build/libs
+        run: |
+          ls -al fabric-placeholderapi/build/libs
+        
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version || github.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: "Release ${{ inputs.version || github.ref }}"
+          body: "Automatic release of version ${{ inputs.version || github.ref }}"
+          draft: false
+          prerelease: false
+          files: |
+            fabric-placeholderapi/build/libs/LuckPerms-Fabric-PlaceholderAPI-Hook.jar
+            LICENSE.txt
+          fail_on_unmatched_files: true
